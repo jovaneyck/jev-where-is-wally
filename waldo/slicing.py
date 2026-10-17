@@ -1,4 +1,4 @@
-"""Cut a scene into tiles at the scale the hill-climb was measured on (see hillclimb.md)."""
+"""Cut a scene into tiles at the scale the hill-climb chose (see hillclimb.md)."""
 
 from dataclasses import dataclass
 
@@ -46,8 +46,19 @@ def to_scene(box: Box, tile: Tile, scene_size: tuple[int, int], size: int = TILE
     )
 
 
+def dataset_region(scene_size: tuple[int, int], col: int, row: int) -> tuple[int, int, int, int]:
+    """Original pixels covered by dataset tile `<scene>_<col>_<row>`: the scene was resized to SHORT_SIDE,
+    centre-cropped to a square and cut into a 4x4 grid of TILE."""
+    scale = SHORT_SIDE / min(scene_size)
+    width, height = (round(side * scale) for side in scene_size)
+    left = (width - SHORT_SIDE) // 2 + col * TILE
+    top = (height - SHORT_SIDE) // 2 + row * TILE
+    return tuple(round(edge / scale) for edge in (left, top, left + TILE, top + TILE))
+
+
 def resized(scene: Image.Image) -> Image.Image:
-    scale = SHORT_SIDE / min(scene.size)
+    """Native resolution beat dataset scale in eval (hillclimb.md); only scenes below dataset scale are scaled up."""
+    scale = max(1.0, SHORT_SIDE / min(scene.size))
     return scene.convert("RGB").resize(
         (round(scene.width * scale), round(scene.height * scale)), Image.Resampling.LANCZOS
     )

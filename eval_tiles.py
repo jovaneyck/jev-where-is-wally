@@ -11,17 +11,25 @@ import asyncio
 import json
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from dotenv import load_dotenv
 from PIL import Image as PilImage
 from typesafe_sdk import AsyncTypeSafeClient, Box, Image, Noul
 
-from waldo import jev
+from waldo import jev, slicing
 from waldo.jev import REFERENCE, WALDO
 from waldo.metrics import Scored, auc, scene_hit_rate
 
 TILES = Path("data/wheres-waldo/Hey-Waldo/256")
+ORIGINALS = Path("data/wheres-waldo/Hey-Waldo/original-images-unredacted")  # tiles were cut before redaction
+# Tile scene ids don't match original file names; found by template matching. 2/5 and 3/6 are duplicates.
+SCENE_ORIGINALS = {
+    1: "1.jpg", 2: "17.jpg", 3: "18.jpg", 4: "19.jpg", 5: "17.jpg", 6: "18.jpg", 7: "3.jpg",
+    8: "4.jpg", 9: "5.jpg", 10: "6.jpg", 11: "7.jpg", 12: "10.jpg", 13: "8.jpg", 14: "9.jpg",
+    15: "11.jpg", 16: "12.jpg", 17: "13.jpg", 18: "14.jpg", 19: "15.jpg", 20: "2.jpg", 21: "16.jpg",
+}  # fmt: skip
 RUNS = Path("out/runs")
 UPSCALE = 2  # tiles are 256px, the API minimum side is 280px
 CONCURRENCY = 16
@@ -57,22 +65,39 @@ def reference_lookalikes(tile: PilImage.Image):
     return state, questions(LOOKALIKES)
 
 
-VARIANTS = {
-    "baseline": baseline,
-    "reference": reference,
-    "reference_rerun": reference,  # same prompt, measures run-to-run noise
-    "reference_lookalikes": reference_lookalikes,
-    "reference_x4": lambda tile: reference(tile, 4),
-    "reference_x6": lambda tile: reference(tile, 6),
-    "x6_nearest": lambda tile: reference(tile, 6, PilImage.Resampling.NEAREST),
-    "x6_lookalikes": lambda tile: reference(tile, 6, asked=lambda: questions(LOOKALIKES)),
-    "x6_phrasings": jev.request,  # the shipped solver request
-    "x6_phrasings_lookalikes": lambda tile: jev.request(tile, LOOKALIKES),
-}
-
-
 def load_tile(path: Path) -> PilImage.Image:
     return PilImage.open(path).convert("RGB")
+
+
+def native_tiles(path: Path) -> list[PilImage.Image]:
+    """The labelled tile's region cut from the original at native resolution, as TILE-sized sub-tiles."""
+    scene, col, row = (int(part) for part in path.stem.split("_"))
+    original = PilImage.open(ORIGINALS / SCENE_ORIGINALS[scene]).convert("RGB")
+    region = original.crop(slicing.dataset_region(original.size, col, row))
+    if min(region.size) < slicing.TILE:  # original is below dataset scale: nothing to gain
+        return [region.resize((slicing.TILE, slicing.TILE), PilImage.Resampling.LANCZOS)]
+    return [region.crop((t.x, t.y, t.x + slicing.TILE, t.y + slicing.TILE)) for t in slicing.tiles(*region.size)]
+
+
+def on_tile(build):
+    """Variant asking one request about the labelled 256px tile itself."""
+    return lambda path: [build(load_tile(path))]
+
+
+VARIANTS = {
+    "baseline": on_tile(baseline),
+    "reference": on_tile(reference),
+    "reference_rerun": on_tile(reference),  # same prompt, measures run-to-run noise
+    "reference_lookalikes": on_tile(reference_lookalikes),
+    "reference_x4": on_tile(lambda tile: reference(tile, 4)),
+    "reference_x6": on_tile(lambda tile: reference(tile, 6)),
+    "x6_nearest": on_tile(lambda tile: reference(tile, 6, PilImage.Resampling.NEAREST)),
+    "x6_lookalikes": on_tile(lambda tile: reference(tile, 6, asked=lambda: questions(LOOKALIKES))),
+    "x6_phrasings": on_tile(jev.request),  # the shipped solver request
+    "x6_phrasings_lookalikes": on_tile(lambda tile: jev.request(tile, LOOKALIKES)),
+    # region scored by its most likely native-resolution sub-tile, as the solver picks its most likely tile
+    "native_x6_phrasings": lambda path: [jev.request(t) for t in native_tiles(path)],
+}
 
 
 def labelled_tiles() -> list[Path]:
@@ -87,23 +112,22 @@ def cached(run: Path) -> dict[str, dict]:
 
 
 async def ask(client: AsyncTypeSafeClient, variant, path: Path) -> dict:
-    state, questions = variant(load_tile(path))
-    result = await client.system_one(
-        state=state,
-        questions=questions,
-        model="jev-preview",
-        extra_headers={"TypeSafe-Danger-Zone-Images": "true"},
-    )
-    box = result.boxes["box"]
-    nouls = {name: answer.noul for name, answer in result.answers.items() if answer.type == "noul"}
+    async def one(state, questions) -> jev.TileAnswer:
+        return jev.read(
+            await client.system_one(state=state, questions=questions, model=jev.MODEL, extra_headers=jev.HEADERS)
+        )
+
+    answers = await asyncio.gather(*(one(*request) for request in variant(path)))
+    best = max(answers, key=lambda a: a.presence)
     return {
         "tile": path.as_posix(),
         "scene": path.name.split("_")[0],
         "is_waldo": path.parent.name == "waldo",
-        "present": sum(nouls.values()) / len(nouls),
-        "nouls": nouls,
-        "box_confidence": box.confidence,
-        "box": box.box.model_dump(),
+        "present": best.presence,
+        "nouls": best.nouls,
+        "box_confidence": best.box_confidence,
+        "box": asdict(best.box),
+        "requests": len(answers),
     }
 
 

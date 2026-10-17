@@ -43,6 +43,14 @@
 - **First run, by eyeball:** Waldo found in 14 of 19 scenes; 2 more boxes are on Waldo's postage-stamp portrait (scenes 10 and 16); 3 misses (9, 11, 13).
 - **The label doesn't discriminate.** Every scene's best tile scores at least 0.5, so every scene is labelled "Waldo". All originals contain Waldo, so "No Waldo" can't be validated.
 
+## Native-resolution slicing (shipped)
+
+- **The eval data was mis-mapped.** Tile scene ids don't match original file names; the mapping in `eval_tiles.py` was found by template matching. Tile scenes 2 and 5 are both `17.jpg`, and 3 and 6 are both `18.jpg`, so two pictures count double in every score.
+- **The `native_x6_phrasings` variant.** Each labelled tile's region is cut from the unredacted original at native resolution into up to four 256px sub-tiles, and the region scores as its best sub-tile. 120 regions come from originals smaller than dataset scale, so they don't change.
+- **Presence AUC:** 0.911 / 0.915 on all tiles, against 0.901 / 0.904 before. On the 181 changed regions it is **0.951 / 0.951** against 0.924 / 0.934. The scene hit rate is unchanged.
+- **Solver change.** Scenes are never shrunk; only scenes below a 1024 short side are scaled up. On the hi-res set this costs about 2.4× more requests.
+- **Hi-res, by eyeball.** The Toys and Ocean misses are now hits. New doubts: Skiing and Beach may be **Wenda** (stripes, bobble hat, glasses, longer hair), and Film Set's pick shows no glasses.
+
 ## Next steps
 
 1. Re-check the top 3 tiles per scene with a more expensive second pass.
