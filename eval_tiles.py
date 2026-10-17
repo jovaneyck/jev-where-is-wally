@@ -17,14 +17,14 @@ from dotenv import load_dotenv
 from PIL import Image as PilImage
 from typesafe_sdk import AsyncTypeSafeClient, Box, Image, Noul
 
+from waldo import jev
+from waldo.jev import REFERENCE, WALDO
 from waldo.metrics import Scored, auc, scene_hit_rate
 
 TILES = Path("data/wheres-waldo/Hey-Waldo/256")
 RUNS = Path("out/runs")
 UPSCALE = 2  # tiles are 256px, the API minimum side is 280px
 CONCURRENCY = 16
-WALDO = "red-and-white striped shirt and bobble hat, round glasses"
-REFERENCE = Image(Path("assets/waldo-ref-1_1_1.png"))
 EXCLUDED_SCENES = {"1"}  # REFERENCE is cropped from scene 1
 LOOKALIKES = {
     "true": "A person matching `waldo`: round glasses, bobble hat and red-and-white striped shirt together.",
@@ -37,19 +37,6 @@ def questions(present_criteria=None) -> dict:
     return {
         "present": Noul(instructions="Is Waldo, as shown in `waldo`, in `scene`?", criteria=present_criteria),
         "box": Box(instructions="Waldo, as shown in `waldo`, in `scene`"),
-    }
-
-
-def phrasings(present_criteria=None) -> dict:
-    """Differently worded presence questions; their nouls are averaged into one signal."""
-    return {
-        **questions(present_criteria),
-        "present_face": Noul(instructions="Does `scene` show the face of the person in `waldo.picture`?"),
-        "present_outfit": Noul(
-            instructions="Is someone in `scene` wearing the exact outfit from `waldo`: "
-            "red-and-white striped shirt and matching bobble hat?"
-        ),
-        "present_glasses": Noul(instructions="Does anyone in `scene` have Waldo's round glasses and dark hair?"),
     }
 
 
@@ -79,8 +66,8 @@ VARIANTS = {
     "reference_x6": lambda tile: reference(tile, 6),
     "x6_nearest": lambda tile: reference(tile, 6, PilImage.Resampling.NEAREST),
     "x6_lookalikes": lambda tile: reference(tile, 6, asked=lambda: questions(LOOKALIKES)),
-    "x6_phrasings": lambda tile: reference(tile, 6, asked=phrasings),
-    "x6_phrasings_lookalikes": lambda tile: reference(tile, 6, asked=lambda: phrasings(LOOKALIKES)),
+    "x6_phrasings": jev.request,  # the shipped solver request
+    "x6_phrasings_lookalikes": lambda tile: jev.request(tile, LOOKALIKES),
 }
 
 

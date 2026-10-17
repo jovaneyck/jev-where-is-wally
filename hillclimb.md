@@ -36,6 +36,13 @@
 - Box placement is only eyeballed (`out/contact_x6_phrasings.jpg`). There are no ground-truth boxes.
 - Several variants were tried on the same 17 scenes, so expect lower numbers on new pictures.
 
+## Solver (`uv run solve.py` → `out/solution.html`)
+
+- **How the dataset was tiled.** Template matching shows the scene is resized to a short side of 1024 and centre-cropped to 1024×1024, then cut into a 4×4 grid of 256px tiles named `scene_col_row` (not row first). The tiles cover only the central square, which is why scenes 8, 15 and 20 have no Waldo tile.
+- **How the solver tiles.** It slices the *whole* scene at that same scale, aligning the last row and column to the edge, asks the `x6_phrasings` request for each tile, takes the tile with the highest presence, and converts its box back to the scene.
+- **First run, by eyeball:** Waldo found in 14 of 19 scenes; 2 more boxes are on Waldo's postage-stamp portrait (scenes 10 and 16); 3 misses (9, 11, 13).
+- **The label doesn't discriminate.** Every scene's best tile scores at least 0.5, so every scene is labelled "Waldo". All originals contain Waldo, so "No Waldo" can't be validated.
+
 ## Next steps
 
 1. Re-check the top 3 tiles per scene with a more expensive second pass.
