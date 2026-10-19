@@ -51,6 +51,23 @@
 - **Solver change.** Scenes are never shrunk; only scenes below a 1024 short side are scaled up. On the hi-res set this costs about 2.4× more requests.
 - **Hi-res, by eyeball.** The Toys and Ocean misses are now hits. New doubts: Skiing and Beach may be **Wenda** (stripes, bobble hat, glasses, longer hair), and Film Set's pick shows no glasses.
 
+## Lookalikes: Wenda and the Waldo-watchers (shipped: negative references)
+
+- **References.** Wenda and a strip of Waldo-watchers are cropped from the unredacted hi-res Food Court lineup (`assets/wenda-ref.png`, `assets/watchers-ref.png`). That scene isn't part of the eval, so there's no leak. Watchers don't wear glasses.
+- **Probe** (`probe_lookalikes.py`): 9 Waldos and 5 lookalikes (2 Wendas, 1 watcher, a striped torso, a fisherman), each verified by eye. These are native tiles centred on hi-res solver picks, with 3 repeats each. The probe is small and its tiles were picked after seeing the results, so it's indicative only.
+
+| Variant | Probe AUC | Eval AUC (native, two runs) |
+|---|---|---|
+| Phrasings, no negatives (previously shipped) | 0.711 (both Wendas score 0.87) | 0.911 / 0.915 |
+| Contrast text: "not Wenda (skirt, long hair), not watchers (no glasses)" | 0.800 | 0.909 / 0.914 |
+| **Wenda and watcher pictures as `not_waldo` in `state`** | **0.911** | **0.929 / 0.928** |
+| … minus 0.5 × a lookalike Noul | 0.956 | 0.893 |
+| … minus 1.0 × a lookalike Noul | 0.956 | 0.834 |
+
+- The pictures in `state` lift both measures, so they ship. The lookalike-Noul penalty helps the probe but clearly hurts the larger eval, so it doesn't ship.
+- **Hi-res, by eye.** Skiing is fixed (the real Waldo, not Wenda). Beach (Wenda) and Film Set (a watcher) are still wrong. Underground, Candy Factory and Space Station switched to a *different* glasses-and-bobble-hat figure than the last run, and I can't tell Waldo from Wenda there by eye.
+- **Measurement gap.** There's no ground truth for the hi-res scenes, so end-to-end changes there can't be measured, only eyeballed.
+
 ## Next steps
 
 1. Re-check the top 3 tiles per scene with a more expensive second pass.

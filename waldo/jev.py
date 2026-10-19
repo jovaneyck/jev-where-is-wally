@@ -12,7 +12,10 @@ MODEL = "jev-preview"
 HEADERS = {"TypeSafe-Danger-Zone-Images": "true"}
 UPSCALE = 6
 WALDO = "red-and-white striped shirt and bobble hat, round glasses"
-REFERENCE = Image(Path(__file__).parent.parent / "assets/waldo-ref-1_1_1.png")
+ASSETS = Path(__file__).parent.parent / "assets"
+REFERENCE = Image(ASSETS / "waldo-ref-1_1_1.png")
+# Lookalikes from the unredacted hi-res Food Court lineup; showing them lifts eval and probe AUC (hillclimb.md)
+NOT_WALDO = {"wenda": Image(ASSETS / "wenda-ref.png"), "waldo_watchers": Image(ASSETS / "watchers-ref.png")}
 
 
 @dataclass(frozen=True)
@@ -41,16 +44,19 @@ def questions(present_criteria=None) -> dict:
     }
 
 
-def request(tile: PilImage.Image, present_criteria=None) -> tuple[dict, dict]:
+def request(tile: PilImage.Image, present_criteria=None, negatives: bool = True) -> tuple[dict, dict]:
     state = {"scene": Image.from_pil(prepare(tile)), "waldo": {"description": WALDO, "picture": REFERENCE}}
+    if negatives:
+        state["not_waldo"] = dict(NOT_WALDO)
     return state, questions(present_criteria)
 
 
 def read(result) -> TileAnswer:
     nouls = {name: answer.noul for name, answer in result.answers.items() if answer.type == "noul"}
+    presences = [value for name, value in nouls.items() if name.startswith("present")]
     box = result.boxes["box"]
     return TileAnswer(
-        presence=sum(nouls.values()) / len(nouls),
+        presence=sum(presences) / len(presences),
         nouls=nouls,
         box=slicing.Box(left=box.box.left, top=box.box.top, right=box.box.right, bottom=box.box.bottom),
         box_confidence=box.confidence,

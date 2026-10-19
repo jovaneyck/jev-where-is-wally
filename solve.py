@@ -24,7 +24,7 @@ from waldo.solver import solve
 
 SCENES = Path("data/hi-res")
 OUT = Path("out")
-CONCURRENCY = 16
+CONCURRENCY = 8
 
 
 async def solve_scene(client: AsyncTypeSafeClient, path: Path, gate: asyncio.Semaphore) -> Entry:

@@ -32,7 +32,7 @@ SCENE_ORIGINALS = {
 }  # fmt: skip
 RUNS = Path("out/runs")
 UPSCALE = 2  # tiles are 256px, the API minimum side is 280px
-CONCURRENCY = 16
+CONCURRENCY = 8
 EXCLUDED_SCENES = {"1"}  # REFERENCE is cropped from scene 1
 LOOKALIKES = {
     "true": "A person matching `waldo`: round glasses, bobble hat and red-and-white striped shirt together.",
@@ -84,6 +84,36 @@ def on_tile(build):
     return lambda path: [build(load_tile(path))]
 
 
+def native(build):
+    """Variant scoring the labelled region by its most likely native-resolution sub-tile, like the solver."""
+    return lambda path: [build(t) for t in native_tiles(path)]
+
+
+CONTRAST = (
+    "short dark hair, round glasses, bobble hat, red-and-white striped shirt, blue trousers. "
+    "Not Wenda (skirt, long dark hair, striped tights) and not a Waldo-watcher (striped clothes but no round glasses)."
+)
+
+
+def negative_references(tile: PilImage.Image):
+    """Shipped request (with lookalike pictures) plus lookalike nouls, kept out of presence for offline weighting."""
+    state, asked = jev.request(tile)
+    asked["lookalike_wenda"] = Noul(
+        instructions="Is the person in red-and-white stripes in `scene` Wenda, as in `not_waldo.wenda`, rather than Waldo?"
+    )
+    asked["lookalike_watcher"] = Noul(
+        instructions="Is the person in red-and-white stripes in `scene` a Waldo-watcher without round glasses, "
+        "as in `not_waldo.waldo_watchers`, rather than Waldo?"
+    )
+    return state, asked
+
+
+def contrast_description(tile: PilImage.Image):
+    state, asked = jev.request(tile, negatives=False)
+    state["waldo"]["description"] = CONTRAST
+    return state, asked
+
+
 VARIANTS = {
     "baseline": on_tile(baseline),
     "reference": on_tile(reference),
@@ -93,10 +123,11 @@ VARIANTS = {
     "reference_x6": on_tile(lambda tile: reference(tile, 6)),
     "x6_nearest": on_tile(lambda tile: reference(tile, 6, PilImage.Resampling.NEAREST)),
     "x6_lookalikes": on_tile(lambda tile: reference(tile, 6, asked=lambda: questions(LOOKALIKES))),
-    "x6_phrasings": on_tile(jev.request),  # the shipped solver request
-    "x6_phrasings_lookalikes": on_tile(lambda tile: jev.request(tile, LOOKALIKES)),
-    # region scored by its most likely native-resolution sub-tile, as the solver picks its most likely tile
-    "native_x6_phrasings": lambda path: [jev.request(t) for t in native_tiles(path)],
+    "x6_phrasings": on_tile(lambda tile: jev.request(tile, negatives=False)),
+    "x6_phrasings_lookalikes": on_tile(lambda tile: jev.request(tile, LOOKALIKES, negatives=False)),
+    "native_x6_phrasings": native(lambda tile: jev.request(tile, negatives=False)),
+    "native_negrefs": native(negative_references),  # the shipped solver, plus lookalike nouls
+    "native_contrast": native(contrast_description),
 }
 
 
@@ -128,6 +159,7 @@ async def ask(client: AsyncTypeSafeClient, variant, path: Path) -> dict:
         "box_confidence": best.box_confidence,
         "box": asdict(best.box),
         "requests": len(answers),
+        "subtiles": [{"presence": a.presence, "nouls": a.nouls, "box_confidence": a.box_confidence} for a in answers],
     }
 
 

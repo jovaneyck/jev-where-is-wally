@@ -36,3 +36,24 @@ def test_read_averages_presence_nouls_and_keeps_the_box():
         box=Box(left=0.1, top=0.2, right=0.3, bottom=0.4),
         box_confidence=0.7,
     )
+
+
+def test_read_keeps_other_nouls_out_of_presence():
+    box = box_answer(0.7)
+    result = SimpleNamespace(
+        answers={"present": noul(0.2), "present_face": noul(0.6), "lookalike_wenda": noul(0.9), "box": box},
+        boxes={"box": box},
+    )
+    answer = read(result)
+    assert answer.presence == 0.4
+    assert answer.nouls["lookalike_wenda"] == 0.9
+
+
+def test_request_shows_lookalikes_as_negative_references():
+    state, _ = request(Image.new("RGB", (256, 256)))
+    assert sorted(state["not_waldo"]) == ["waldo_watchers", "wenda"]
+
+
+def test_request_without_negatives_leaves_them_out():
+    state, _ = request(Image.new("RGB", (256, 256)), negatives=False)
+    assert "not_waldo" not in state
