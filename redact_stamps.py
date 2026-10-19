@@ -18,6 +18,7 @@ REDACTIONS = {  # folder -> scene -> rectangles in original pixels: left, top, r
         "16.jpg": [(390, 42, 506, 170)],
     },
     Path("data/hi-res"): {
+        "Wheres-Waldo-Film-Set-Super-High-Resolution-scaled.jpg": [(558, 185, 650, 282)],
         "Wheres-Waldo-Food-Court-Super-High-Resolution-scaled.jpg": [(140, 980, 630, 1375)],
         "Wheres-Waldo-GIANTS-Super-High-Resolution-scaled-e1737404380369.jpg": [(530, 145, 655, 275)],
         "Wheres-Waldo-Ocean-Super-High-Resolution-scaled-e1737403627172.jpg": [(565, 160, 690, 285)],

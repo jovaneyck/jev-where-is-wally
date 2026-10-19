@@ -46,6 +46,17 @@ def to_scene(box: Box, tile: Tile, scene_size: tuple[int, int], size: int = TILE
     )
 
 
+def in_frame(box: Box, frame: tuple[int, int, int, int], scene_size: tuple[int, int]) -> Box:
+    """A box given as fractions of a pixel frame (e.g. a zoom crop), as fractions of the scene."""
+    (left, top, right, bottom), (width, height) = frame, scene_size
+    return Box(
+        left=(left + box.left * (right - left)) / width,
+        top=(top + box.top * (bottom - top)) / height,
+        right=(left + box.right * (right - left)) / width,
+        bottom=(top + box.bottom * (bottom - top)) / height,
+    )
+
+
 def dataset_region(scene_size: tuple[int, int], col: int, row: int) -> tuple[int, int, int, int]:
     """Original pixels covered by dataset tile `<scene>_<col>_<row>`: the scene was resized to SHORT_SIDE,
     centre-cropped to a square and cut into a 4x4 grid of TILE."""

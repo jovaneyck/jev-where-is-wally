@@ -1,6 +1,6 @@
 from PIL import Image
 
-from waldo.slicing import Box, Tile, dataset_region, offsets, slice_scene, tiles, to_scene
+from waldo.slicing import Box, Tile, dataset_region, in_frame, offsets, slice_scene, tiles, to_scene
 
 
 class TestOffsets:
@@ -28,6 +28,12 @@ class TestToScene:
         assert to_scene(Box(left=0.5, top=0.25, right=0.75, bottom=0.5), Tile(512, 256), (1024, 512)) == Box(
             left=0.625, top=0.625, right=0.6875, bottom=0.75
         )
+
+
+def test_in_frame_maps_a_box_in_any_pixel_frame_to_scene_fractions():
+    assert in_frame(Box(left=0.5, top=0, right=1, bottom=0.5), (100, 200, 300, 400), (1000, 1000)) == Box(
+        left=0.2, top=0.2, right=0.3, bottom=0.3
+    )
 
 
 class TestDatasetRegion:
