@@ -5,8 +5,9 @@ Run:
     2. uv run build_labeler.py                 (once: shipped request on all 700 tiles, the baseline)
     3. uv run hires_eval.py [variant[#n] ...]   no variant: report the baseline only
        uv run hires_eval.py solution             score the solver's out/solution.json end to end
+       uv run hires_eval.py --scenes=Film-Set,Ocean ...   only scenes whose name contains a fragment
     A variant is asked on a subset: every Waldo tile plus each scene's HARD most likely non-Waldo tiles
-    under the baseline. Answers are cached in out/hires/<run>.jsonl.
+    under the baseline; WHOLE_SCENE variants are asked on every tile. Answers are cached in out/hires/<run>.jsonl.
 """
 
 import asyncio
@@ -28,6 +29,7 @@ from waldo.candidates import zoom_frame
 from waldo.ground_truth import contains_waldo, iou
 from waldo.metrics import Scored, auc
 from waldo.slicing import TILE, Box, in_frame
+from waldo.solver import SHORTLIST
 
 LABELS = SCENES / "labels.json"
 SOLUTION = Path("out/solution.json")
@@ -107,7 +109,18 @@ async def run(name: str, tiles: list[dict]) -> list[dict]:
 BATCHED = {  # name: (frame, crops per request, crop side in the request)
     "batched128_g4": (zoom(128), batch.GROUP, batch.SIDE),
     "batched128_s768": (zoom(128), HARD + 1, 768),  # all of a scene's subset tiles in one request
+    "pass1_g4": (tile_frame, batch.GROUP, batch.SIDE),  # pass 1 batched: whole tiles, as the shipped request
 }
+WHOLE_SCENE = {"pass1_g4"}
+BATCHED["pass2_after_pass1_g4"] = (zoom(128), batch.GROUP, batch.SIDE)
+SHORTLIST_FROM = {"pass2_after_pass1_g4": "pass1_g4"}  # name: run whose top SHORTLIST tiles it re-scores, like the solver
+
+
+def top(rows: list[dict], k: int = SHORTLIST) -> list[dict]:
+    by_scene = {}
+    for row in sorted(rows, key=lambda r: -r["presence"]):
+        by_scene.setdefault(row["scene"], []).append(row)
+    return [row for ranked in by_scene.values() for row in ranked[:k]]
 
 
 async def run_batched(name: str, tiles: list[dict]) -> list[dict]:
@@ -183,11 +196,20 @@ if __name__ == "__main__":
     labels = {scene: Box(**box) for scene, box in json.loads(LABELS.read_text()).items()}
     if sys.argv[1:] == ["solution"]:
         sys.exit(report_solution(labels))
-    sizes, baseline = scene_sizes(), load(BASELINE)
-    report("baseline (all tiles)", baseline, labels, sizes)
+    fragments = next((a.removeprefix("--scenes=").split(",") for a in sys.argv[1:] if a.startswith("--scenes=")), [""])
+    labels = {scene: box for scene, box in labels.items() if any(f in scene for f in fragments)}
+    sizes = scene_sizes()
+    baseline = [r for r in load(BASELINE) if r["scene"] in labels]
+    report(f"baseline (all {len(baseline)} tiles)", baseline, labels, sizes)
     tiles = subset(baseline, labels, sizes)
     keys = {(t["scene"], t["x"], t["y"]) for t in tiles}
     report(f"baseline ({len(tiles)} subset)", [r for r in baseline if (r["scene"], r["x"], r["y"]) in keys], labels, sizes)
-    for name in sys.argv[1:]:
-        runner = run_batched if name.split("#")[0] in BATCHED else run
-        report(name, asyncio.run(runner(name, tiles)), labels, sizes)
+    for name in (a for a in sys.argv[1:] if not a.startswith("--")):
+        variant = name.split("#")[0]
+        runner = run_batched if variant in BATCHED else run
+        if variant in SHORTLIST_FROM:
+            asked = top([r for r in load(OUT / f"{SHORTLIST_FROM[variant]}.jsonl") if r["scene"] in labels])
+        else:
+            asked = baseline if variant in WHOLE_SCENE else tiles
+        rows = asyncio.run(runner(name, asked))
+        report(name, [r for r in rows if r["scene"] in labels], labels, sizes)

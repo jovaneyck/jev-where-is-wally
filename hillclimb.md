@@ -145,7 +145,21 @@ Hits are out of 17 scenes; `none` wins and order agreement are out of 20 scenes 
   - `THRESHOLD` isn't recalibrated for zoomed presence. Every scene contains Waldo, so "No Waldo" still can't be measured.
   - It's one end-to-end run on 10 scenes that also served for tuning the zoom level.
 
+## Batching pass 1 too (measured on the 3 hardest scenes, not shipped)
+
+These are the scenes where pass 1 ranks Waldo worst: Film Set, Ocean and Space Station. Reproduce with `uv run hires_eval.py --scenes=Film-Set,Ocean,Space-Station pass1_g4 pass2_after_pass1_g4`.
+
+| Pass 1 (210 tiles) | Requests | Tile AUC | Waldo's rank |
+|---|---|---|---|
+| One tile per request (shipped) | 210 | 0.948 | 7, 3, 3 |
+| **4 tiles per request, position order (`pass1_g4`)** | **54** | **0.979** | **2, 2, 1** |
+
+- **The shipped pass 2 on that shortlist** (`pass2_after_pass1_g4`, top 10 → zoom crops in batches of 4, 9 requests) puts Waldo first in **3/3** scenes, with tile AUC 1.000.
+- **Batching helps pass 1 as well**, and it would cut a hi-res scene from 73 requests to 21.
+- **Probably fewer tokens too:** each request repeats the 3 reference pictures, so 4 tiles per request means 7 images instead of 16. That assumes images make up most of the tokens, which isn't verified.
+- **Caveats:** one run on 3 scenes, chosen for being hardest under the unbatched pass 1; they were not chosen for batching. The other 7 scenes weren't run, to save tokens.
+
 ## Next steps
 
-1. Batch pass 1 too: 4 tiles per request would cut a hi-res scene from 73 requests to about 21. This needs measuring, because pass 1 sees whole tiles, not zoom crops.
+1. Ship batched pass 1 in the solver, then confirm end to end on all 10 scenes when tokens allow.
 2. Get scenes that weren't used for tuning, to check that this generalises.
